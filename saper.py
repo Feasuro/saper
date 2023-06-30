@@ -5,8 +5,8 @@ import random
 from PyQt6.QtCore import QSize
 from PyQt6.QtCore import pyqtSignal as Signal
 from PyQt6.QtCore import pyqtSlot as Slot
-from PyQt6.QtGui import QIcon, QPixmap
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton, QGridLayout, QLabel
+from PyQt6.QtGui import QIcon, QPixmap, QAction
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton, QGridLayout, QLabel, QToolBar
 
 class Button(QPushButton):
     """Button that covers field"""
@@ -99,7 +99,7 @@ class Board(QWidget):
             for f in self.bombs:
                 self.uncover(f)
                 #self.layout.itemAtPosition(*f).widget().click
-        wincounter -= 1
+        self.wincounter -= 1
         return True
 
 
@@ -114,6 +114,24 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(QIcon('./resources/mine.png'))
         #self.setGeometry(100,100,700,500)
         
+        new = QAction(QIcon('./resources/smiley.png'), '&New' , self)
+        new.triggered.connect(self.new_game)
+        
+        toolbar = QToolBar()
+        toolbar.setIconSize(QSize(32, 32))
+        toolbar.setMovable(False)
+        toolbar.addAction(new)
+        self.addToolBar(toolbar)
+        
+        self.statusbar = self.statusBar()
+        self.statuslabel = QLabel('Bombs left')
+        self.timer = QLabel('Time:')
+        self.statusbar.addPermanentWidget(self.statuslabel)
+        self.statusbar.addPermanentWidget(self.timer)
+        
+        self.new_game()
+    
+    def new_game(self):
         self.playground = Board(10, 10, 10)
         self.setCentralWidget(self.playground)
 
