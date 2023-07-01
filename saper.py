@@ -2,25 +2,45 @@
 
 import sys
 import random
-from PyQt6.QtCore import QSize
+from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtCore import pyqtSignal as Signal
-from PyQt6.QtCore import pyqtSlot as Slot
-from PyQt6.QtGui import QIcon, QPixmap, QAction
+#from PyQt6.QtCore import pyqtSlot as Slot
+from PyQt6.QtGui import QIcon, QPixmap, QAction, QCursor
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton, QGridLayout, QLabel, QToolBar
 
-class Button(QPushButton):
+class CoverButton(QPushButton):
     """ Button that covers field """
     click = Signal(tuple)
+    pressed = Signal()
 
-    def __init__(self, field, *args, **kwargs):
+    def __init__(self, field: tuple, *args, **kwargs):
         """ button is aware of it's position that is emitted when clicked """
         super().__init__(*args, **kwargs)
+        self.setCheckable(True)
+        self.setProperty('active', True)
         self.setProperty('field', field)
-        self.clicked.connect(self.on_click)
-
-    @Slot()
-    def on_click(self):
-        self.click.emit(self.property('field'))
+        self.setProperty('flagged', False)
+    
+    def mousePressEvent(self, event):
+        if self.property('active') :
+            if event.button() == Qt.MouseButton.LeftButton :
+                self.pressed.emit()
+                print('debug: press l')
+            elif event.button() == Qt.MouseButton.RightButton :
+                if self.property('flagged'):
+                    self.setIcon(QIcon())
+                else:
+                    self.setIcon(QIcon('./resources/flag.png'))
+                self.setProperty('flagged', True)
+    
+    def mouseReleaseEvent(self, event):
+        if self.property('active') :
+            if event.button() == Qt.MouseButton.LeftButton :
+                self.click.emit(self.property('field'))
+                print('debug: click l')
+                #print('debug 1', QCursor.pos(), self.hitButton( QCursor.pos() ), self.pos() )
+                if self.hitButton( QCursor.pos() ) :
+                    print('debug 2')
 
 
 class Board(QWidget):
@@ -32,29 +52,29 @@ class Board(QWidget):
         super().__init__(*args, **kwargs)
         
         self.bombcount = bombcount
-        self.wincounter = 0
+        self.wincounter = x * y
         #labels that store field contents
-        self.field = {(i,j): QLabel() for i in range(x) for j in range(y)}
-        for f in self.field:
-            self.field[f].setProperty('covered', True)
-            self.wincounter += 1
-        self.populate()
+        self.populate(x, y)
+        self.buttons = {field : CoverButton(field, click=self.uncover) for field in self.fields}
         #make layout and fill with covering buttons
         self.setFixedSize(18 * x, 18 * y)
-        self.layout = QGridLayout()
-        self.layout.setSpacing(0)
-        for f in self.field:
-            self.field[f].setFixedSize(QSize(18, 18))
-            self.layout.addWidget(Button(f, click=self.uncover), f[0], f[1])
-        self.setLayout(self.layout)
+        layout = QGridLayout()
+        layout.setSpacing(0)
+        #self.layout.setContentsMargins(0,0,0,0)
+        for field in self.buttons:
+            self.buttons[field].setFixedSize(QSize(18, 18))
+            layout.addWidget(self.buttons[field], *field)
+        self.setLayout(layout)
     
-    def populate(self) -> None:
-        """ Fills board with mines and numbers """
-        self.bombs = random.sample(sorted(self.field), self.bombcount)
+    def populate(self, x, y) -> None:
+        """ Fills board with numbers (9 stands for mine) """
+        self.fields = {(i,j): 0 for i in range(x) for j in range(y)}
+        self.bombs = random.sample(sorted(self.fields), self.bombcount)
         self.empty = []
+        self.numbers = []
         for f in self.bombs:
-            self.field[f].setPixmap(QPixmap('./resources/mine.png').scaled(18, 18))
-        for f in self.field:
+            self.fields[f] = 9
+        for f in self.fields:
             if f in self.bombs:
                 continue
             else:
@@ -65,54 +85,55 @@ class Board(QWidget):
                 if counter == 0:
                     self.empty.append(f)
                 else:
-                    self.field[f].setText(str(counter))
+                    self.numbers.append(f)
+                self.fields[f] = counter
     
-    def neighborhood(self, f: tuple) -> list:
+    def neighborhood(self, field: tuple) -> list:
         """ Returns neighbor fields to the given one """
         neighbors = []
-        for i in range(f[0]-1, f[0]+2):
-            for j in range(f[1]-1, f[1]+2):
-                if (i,j) == f:
+        for i in range(field[0]-1, field[0]+2):
+            for j in range(field[1]-1, field[1]+2):
+                if (i,j) == field:
                     continue
-                elif (i,j) in self.field:
+                elif (i,j) in self.fields:
                     neighbors.append((i,j))
         return neighbors
     
     def uncover(self, field) -> bool:
         """ Method reveals content of the field(s) """
-        if not self.field[field].property('covered'):
+        if self.buttons[field].isChecked() : #self.buttons[field].isDown() or
             return False
-
-        button = self.layout.itemAtPosition(*field).widget()
-        self.layout.removeWidget(button)
-        self.layout.addWidget(self.field[field], *field)
-        self.field[field].setProperty('covered', False)
-        #recurrent uncovering
-        if field in self.empty:
+        self.buttons[field].setChecked(True)
+        #uncover a number
+        if field in self.numbers :
+            self.buttons[field].setText( str(self.fields[field]) )
+        #loose when you click a bomb
+        elif field in self.bombs :
+            self.buttons[field].setIcon( QIcon('./resources/mine.png') )
+            self.failure()
+        #field in self.empty - recurrent uncovering
+        else :
             for f in self.neighborhood(field):
                 self.uncover(f)
-        #loose when you click a bomb
-        if field in self.bombs:
-            self.failure()
         #check victory condition
         self.victory()
         return True
     
     def failure(self) -> None:
         """ Show bombs, deactivate fields, and send lost signal """
-        for f in self.bombs:
-                self.uncover(f)
-        for f in self.field:
-            if self.field[f].property('covered') == True:
-                self.layout.itemAtPosition(*f).widget().setFlat(True)
+        for field in self.bombs :
+                self.uncover(field)
+        for field in self.fields :
+            self.buttons[field].setProperty('active', False)
         self.lost.emit()
     
     def victory(self) -> None:
         """ Decrease counter, check condition, deactivate bomb-fields and send win signal """
         self.wincounter -= 1
         if self.wincounter == self.bombcount :
-            for f in self.bombs:
-                self.layout.itemAtPosition(*f).widget().setFlat(True)
+            for field in self.bombs:
+                self.buttons[field].setIcon(QIcon('./resources/flag.png'))
+                self.buttons[field].setChecked(True)
             self.won.emit()
 
 
