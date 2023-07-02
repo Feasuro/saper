@@ -4,13 +4,13 @@ import sys
 import random
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtCore import pyqtSignal as Signal
-#from PyQt6.QtCore import pyqtSlot as Slot
 from PyQt6.QtGui import QIcon, QPixmap, QAction, QCursor
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton, QGridLayout, QLabel, QToolBar
 
 class CoverButton(QPushButton):
     """ Button that covers field """
     click = Signal(tuple)
+    middle = Signal(tuple)
     pressed = Signal()
 
     def __init__(self, field: tuple, *args, **kwargs):
@@ -27,11 +27,17 @@ class CoverButton(QPushButton):
                 self.pressed.emit()
                 print('debug: press l')
             elif event.button() == Qt.MouseButton.RightButton :
-                if self.property('flagged'):
-                    self.setIcon(QIcon())
-                else:
-                    self.setIcon(QIcon('./resources/flag.png'))
-                self.setProperty('flagged', True)
+                if not self.isChecked() :
+                    if self.property('flagged'):
+                        self.setIcon(QIcon())
+                        self.setProperty('flagged', False)
+                    else:
+                        self.setIcon(QIcon('./resources/flag.png'))
+                        self.setProperty('flagged', True)
+            elif event.button() == Qt.MouseButton.MiddleButton :
+                if self.isChecked() :
+                    self.pressed.emit()
+                    
     
     def mouseReleaseEvent(self, event):
         if self.property('active') :
@@ -41,6 +47,9 @@ class CoverButton(QPushButton):
                 #print('debug 1', QCursor.pos(), self.hitButton( QCursor.pos() ), self.pos() )
                 if self.hitButton( QCursor.pos() ) :
                     print('debug 2')
+            if event.button() == Qt.MouseButton.MiddleButton :
+                if self.isChecked() :
+                    self.middle.emit(self.property('field'))
 
 
 class Board(QWidget):
@@ -55,7 +64,7 @@ class Board(QWidget):
         self.wincounter = x * y
         #labels that store field contents
         self.populate(x, y)
-        self.buttons = {field : CoverButton(field, click=self.uncover) for field in self.fields}
+        self.buttons = {field : CoverButton(field, click=self.uncover, middle=self.mass_uncover) for field in self.fields}
         #make layout and fill with covering buttons
         self.setFixedSize(18 * x, 18 * y)
         layout = QGridLayout()
@@ -119,6 +128,14 @@ class Board(QWidget):
         self.victory()
         return True
     
+    def mass_uncover(self, field) -> bool:
+        if not self.buttons[field].isChecked() :
+            return False
+        for f in self.neighborhood(field):
+            if not self.buttons[f].property('flagged') :
+                self.uncover(f)
+        return True
+    
     def failure(self) -> None:
         """ Show bombs, deactivate fields, and send lost signal """
         for field in self.bombs :
@@ -179,6 +196,10 @@ class MainWindow(QMainWindow):
         self.playground = Board(10, 10, 10)
         self.playground.lost.connect(self.handle_failure)
         self.playground.won.connect(self.handle_victory)
+        for field in self.playground.fields :
+            self.playground.buttons[field].pressed.connect(self.handle_mouse_press)
+            self.playground.buttons[field].click.connect(self.handle_mouse_release)
+            self.playground.buttons[field].middle.connect(self.handle_mouse_release)
         self.setCentralWidget(self.playground)
     
     def handle_failure(self):
@@ -189,6 +210,14 @@ class MainWindow(QMainWindow):
     def handle_victory(self):
         """ Communicate victory to the player """
         self.statuslabel.setText('Victory!')
+    
+    def handle_mouse_press(self):
+        """ Change icon to wow """
+        self.new.setIcon(self.wow)
+    
+    def handle_mouse_release(self):
+        """ Change icon to smiley """
+        self.new.setIcon(self.smiley)
 
 
 if __name__ == '__main__':
