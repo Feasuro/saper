@@ -52,7 +52,7 @@ class Board(QWidget):
     lost = Signal()
     won = Signal()
     
-    def __init__(self, x, y, bombcount, size, *args, **kwargs):
+    def __init__(self, x, y, bombcount, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
         self.bombcount = bombcount
@@ -63,7 +63,6 @@ class Board(QWidget):
         layout = QGridLayout()
         layout.setSpacing(0)
         for field in self.buttons:
-            self.buttons[field].setFixedSize(QSize(size, size))
             layout.addWidget(self.buttons[field], *field)
         self.setLayout(layout)
     
@@ -191,6 +190,12 @@ class MainWindow(QMainWindow):
         close = QAction(self.close, '&Exit', self)
         close.setShortcut('Alt+F4')
         close.triggered.connect(self.destroy)
+        larger = QAction('&Larger', self)
+        larger.setShortcut('Ctrl++')
+        larger.triggered.connect(self.enlarge)
+        smaller = QAction('&Smaller', self)
+        smaller.setShortcut('Ctrl+-')
+        smaller.triggered.connect(self.zoomout)
         #toolbar
         toolbar = QToolBar()
         toolbar.setIconSize(QSize(32, 32))
@@ -218,11 +223,13 @@ class MainWindow(QMainWindow):
         game.addAction(custom)
         game.addSeparator()
         game.addAction(close)
+        options = menu.addMenu('&Options')
+        options.addAction(larger)
+        options.addAction(smaller)
     
     def new_game(self):
         """Set up for a new game"""
         #prepare window
-        self.setFixedSize(self.size * self.cols + 18, self.size * self.rows + 106)
         self.new.setIcon(self.smiley)
         #be sure that timer is reset and shows 0
         self.killTimer(self.timerID)
@@ -233,7 +240,7 @@ class MainWindow(QMainWindow):
         self.bombsleft = self.bombcount
         self.statusbar.showMessage(f'{self.bombsleft} bombs left')
         #game widget
-        self.playground = Board(self.rows, self.cols, self.bombcount, self.size)
+        self.playground = Board(self.rows, self.cols, self.bombcount)
         self.playground.lost.connect(self.handle_failure)
         self.playground.won.connect(self.handle_victory)
         for field in self.playground.fields :
@@ -284,22 +291,42 @@ class MainWindow(QMainWindow):
             self.clock.setText(f'Time: {self.seconds // 3600}h{self.seconds // 60}m{self.seconds % 60}s')
     
     def beginner_mode(self):
+        """Beginner game setup"""
         self.cols = 8
         self.rows = 8
         self.bombcount = 10
         self.new_game()
     
     def advanced_mode(self):
+        """Advanced game setup"""
         self.cols = 16
         self.rows = 16
         self.bombcount = 40
         self.new_game()
     
     def expert_mode(self):
+        """Expert game setup"""
         self.cols = 30
         self.rows = 16
         self.bombcount = 99
         self.new_game()
+    
+    def enlarge(self):
+        """Make fields bigger"""
+        self.size += 2
+        self.update()
+    
+    def zoomout(self):
+        """Make fields smaller"""
+        self.size -= 2
+        self.update()
+    
+    def paintEvent(self, event):
+        """Set fixed size of fields and self"""
+        super().paintEvent(event)
+        for field in self.playground.fields:
+            self.playground.buttons[field].setFixedSize(QSize(self.size, self.size))
+        self.setFixedSize(self.size * self.cols + 18, self.size * self.rows + 106)
 
 
 if __name__ == '__main__':
