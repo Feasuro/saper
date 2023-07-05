@@ -14,14 +14,14 @@ class CoverButton(QPushButton):
     click = Signal(tuple)
     middle = Signal(tuple)
     pressed = Signal()
-    right = Signal(bool)
+    right = Signal(int)
 
     def __init__(self, field: tuple, *args, **kwargs):
-        """button is aware of it's position that is emitted when clicked"""
+        """Button is aware of it's position that is emitted when clicked"""
         super().__init__(*args, **kwargs)
         self.setCheckable(True)
         self.setProperty('field', field)
-        self.setProperty('flagged', False)
+        self.setProperty('flagged', 0)
     
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton :
@@ -30,14 +30,14 @@ class CoverButton(QPushButton):
             if not self.isChecked() :
                 if self.property('flagged'):
                     self.setIcon(QIcon())
-                    self.setProperty('flagged', False)
+                    self.setProperty('flagged', 0)
                 else:
                     self.setIcon(QIcon('./resources/flag.png'))
-                    self.setProperty('flagged', True)
+                    self.setProperty('flagged', 1)
                 self.right.emit(self.property('flagged'))
         elif event.button() == Qt.MouseButton.MiddleButton :
             if self.isChecked() :
-                self.pressed.emit()   
+                self.pressed.emit()
     
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton :
@@ -46,20 +46,39 @@ class CoverButton(QPushButton):
             if self.isChecked() :
                 self.middle.emit(self.property('field'))
 
+class CoverButtonQuestion(CoverButton):
+    """Theese modified buttons can be marked with question mark"""
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.RightButton :
+            if not self.isChecked() :
+                match self.property('flagged'):
+                    case 0:
+                        self.setIcon(QIcon('./resources/flag.png'))
+                        self.setProperty('flagged', 1)
+                    case 1:
+                        self.setIcon(QIcon('./resources/question.png'))
+                        self.setProperty('flagged', 2)
+                    case 2:
+                        self.setIcon(QIcon())
+                        self.setProperty('flagged', 0)
+                self.right.emit(self.property('flagged'))
+        else :
+            super().mousePressEvent(event)
+
 
 class Board(QWidget):
     """Widget that represents the game board"""
     lost = Signal()
     won = Signal()
     
-    def __init__(self, x, y, bombcount, *args, **kwargs):
+    def __init__(self, x, y, bombcount, question=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
         self.bombcount = bombcount
         self.wincounter = x * y
         self.populate(x, y)
         #make layout and fill with covering buttons
-        self.buttons = {field : CoverButton(field, click=self.uncover, middle=self.mass_uncover) for field in self.fields}
+        self.buttons = {field : CoverButtonQuestion(field, click=self.uncover, middle=self.mass_uncover) if question else CoverButton(field, click=self.uncover, middle=self.mass_uncover) for field in self.fields}
         layout = QGridLayout()
         layout.setSpacing(0)
         for field in self.buttons:
@@ -104,7 +123,7 @@ class Board(QWidget):
         if self.buttons[field].isChecked() :
             return False
         self.buttons[field].setIcon(QIcon())
-        self.buttons[field].setProperty('flagged', False)
+        self.buttons[field].setProperty('flagged', 0)
         self.buttons[field].setChecked(True)
         #uncover a number
         if field in self.numbers :
@@ -135,7 +154,8 @@ class Board(QWidget):
             self.buttons[field].setIcon( QIcon('./resources/mine.png') )
             self.buttons[field].setChecked(True)
         for field in self.fields :
-            self.buttons[field].setEnabled(False)
+            if not self.buttons[field].isChecked():
+                self.buttons[field].setEnabled(False)
         self.lost.emit()
     
     def victory(self) -> None:
@@ -159,6 +179,7 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(QIcon('./resources/mine.png'))
         self.timerID = 0
         self.size = 20
+        self.setProperty('question', False)
         
         self.ui_setup()
         self.beginner_mode()
@@ -196,6 +217,10 @@ class MainWindow(QMainWindow):
         smaller = QAction('&Smaller', self)
         smaller.setShortcut('Ctrl+-')
         smaller.triggered.connect(self.zoomout)
+        question = QAction('&Question marks', self)
+        question.setShortcut('Ctrl+Q')
+        question.setCheckable(True)
+        question.triggered.connect(self.question_marks)
         #toolbar
         toolbar = QToolBar()
         toolbar.setIconSize(QSize(32, 32))
@@ -226,10 +251,11 @@ class MainWindow(QMainWindow):
         options = menu.addMenu('&Options')
         options.addAction(larger)
         options.addAction(smaller)
+        options.addSeparator()
+        options.addAction(question)
     
     def new_game(self):
         """Set up for a new game"""
-        #prepare window
         self.new.setIcon(self.smiley)
         #be sure that timer is reset and shows 0
         self.killTimer(self.timerID)
@@ -240,7 +266,7 @@ class MainWindow(QMainWindow):
         self.bombsleft = self.bombcount
         self.statusbar.showMessage(f'{self.bombsleft} bombs left')
         #game widget
-        self.playground = Board(self.rows, self.cols, self.bombcount)
+        self.playground = Board(self.rows, self.cols, self.bombcount, question=self.property('question'))
         self.playground.lost.connect(self.handle_failure)
         self.playground.won.connect(self.handle_victory)
         for field in self.playground.fields :
@@ -274,9 +300,9 @@ class MainWindow(QMainWindow):
     
     def message(self, flagged):
         """Informs how many bombs are left"""
-        if flagged :
+        if flagged == 1 :
             self.bombsleft -= 1
-        else :
+        elif ( self.property('question') and flagged == 2 ) or ( not self.property('question') and flagged == 0 ):
             self.bombsleft += 1
         self.statusbar.showMessage(f'{self.bombsleft} bombs left')
     
@@ -327,6 +353,10 @@ class MainWindow(QMainWindow):
         for field in self.playground.fields:
             self.playground.buttons[field].setFixedSize(QSize(self.size, self.size))
         self.setFixedSize(self.size * self.cols + 18, self.size * self.rows + 106)
+    
+    def question_marks(self):
+        self.setProperty('question', not self.property('question'))
+        self.new_game()
 
 
 if __name__ == '__main__':
