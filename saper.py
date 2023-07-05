@@ -22,11 +22,20 @@ class CoverButton(QPushButton):
         self.setCheckable(True)
         self.setProperty('field', field)
         self.setProperty('flagged', 0)
+        self.setStyleSheet('''
+                           * { font-weight: bold; }
+                           *[number="1"] { color: blue; }
+                           *[number="2"] { color: green; }
+                           *[number="3"] { color: red; }
+                           *[number="4"] { color: sienna; }
+                           *[number="5"] { color: purple; }
+                           *[number="6"] { color: goldenrod; }
+                           *[number="7"] { color: black; }
+                           *[number="8"] { color: magenta; }                           
+                           ''')
     
     def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton :
-            self.pressed.emit()
-        elif event.button() == Qt.MouseButton.RightButton :
+        if event.button() == Qt.MouseButton.RightButton :
             if not self.isChecked() :
                 if self.property('flagged'):
                     self.setIcon(QIcon())
@@ -35,6 +44,8 @@ class CoverButton(QPushButton):
                     self.setIcon(QIcon('./resources/flag.png'))
                     self.setProperty('flagged', 1)
                 self.right.emit(self.property('flagged'))
+        elif event.button() == Qt.MouseButton.LeftButton :
+            self.pressed.emit()
         elif event.button() == Qt.MouseButton.MiddleButton :
             if self.isChecked() :
                 self.pressed.emit()
@@ -76,36 +87,35 @@ class Board(QWidget):
         
         self.bombcount = bombcount
         self.wincounter = x * y
-        self.populate(x, y)
-        #make layout and fill with covering buttons
-        self.buttons = {field : CoverButtonQuestion(field, click=self.uncover, middle=self.mass_uncover) if question else CoverButton(field, click=self.uncover, middle=self.mass_uncover) for field in self.fields}
+        #make gameboard, layout and fill with covering buttons
+        self.fields = {(i,j) : CoverButtonQuestion((i,j), click=self.uncover, middle=self.mass_uncover) if question else CoverButton((i,j), click=self.uncover, middle=self.mass_uncover) for i in range(x) for j in range(y)}
+        self.populate()
         layout = QGridLayout()
         layout.setSpacing(0)
-        for field in self.buttons:
-            layout.addWidget(self.buttons[field], *field)
+        for field in self.fields:
+            layout.addWidget(self.fields[field], *field)
         self.setLayout(layout)
     
-    def populate(self, x, y) -> None:
+    def populate(self) -> None:
         """Fills board with numbers (9 stands for mine)"""
-        self.fields = {(i,j): 0 for i in range(x) for j in range(y)}
         self.bombs = random.sample(sorted(self.fields), self.bombcount)
         self.empty = []
         self.numbers = []
-        for f in self.bombs:
-            self.fields[f] = 9
-        for f in self.fields:
-            if f in self.bombs:
+        for field in self.bombs:
+            self.fields[field].setProperty('number', 9)
+        for field in self.fields:
+            if field in self.bombs:
                 continue
             else:
                 counter = 0
-                for h in self.neighborhood(f):
-                    if h in self.bombs:
+                for f in self.neighborhood(field):
+                    if f in self.bombs:
                         counter += 1
                 if counter == 0:
-                    self.empty.append(f)
+                    self.empty.append(field)
                 else:
-                    self.numbers.append(f)
-                self.fields[f] = counter
+                    self.numbers.append(field)
+                self.fields[field].setProperty('number', counter)
     
     def neighborhood(self, field: tuple) -> list:
         """Returns neighbor fields to the given one"""
@@ -120,14 +130,14 @@ class Board(QWidget):
     
     def uncover(self, field) -> bool:
         """Method reveals content of the field(s)"""
-        if self.buttons[field].isChecked() :
+        if self.fields[field].isChecked() :
             return False
-        self.buttons[field].setIcon(QIcon())
-        self.buttons[field].setProperty('flagged', 0)
-        self.buttons[field].setChecked(True)
+        self.fields[field].setIcon(QIcon())
+        self.fields[field].setProperty('flagged', 0)
+        self.fields[field].setChecked(True)
         #uncover a number
         if field in self.numbers :
-            self.buttons[field].setText( str(self.fields[field]) )
+            self.fields[field].setText( str(self.fields[field].property('number')) )
         #loose when you click a bomb
         elif field in self.bombs :
             self.failure()
@@ -141,21 +151,21 @@ class Board(QWidget):
     
     def mass_uncover(self, field) -> bool:
         """Uncovers all non-flagged adjacent fields"""
-        if not self.buttons[field].isChecked() :
+        if not self.fields[field].isChecked() :
             return False
         for f in self.neighborhood(field):
-            if not self.buttons[f].property('flagged') :
+            if not self.fields[f].property('flagged') :
                 self.uncover(f)
         return True
     
     def failure(self) -> None:
         """Show bombs, deactivate fields, and send lost signal"""
         for field in self.bombs :
-            self.buttons[field].setIcon( QIcon('./resources/mine.png') )
-            self.buttons[field].setChecked(True)
+            self.fields[field].setIcon( QIcon('./resources/mine.png') )
+            self.fields[field].setChecked(True)
         for field in self.fields :
-            if not self.buttons[field].isChecked():
-                self.buttons[field].setEnabled(False)
+            if not self.fields[field].isChecked():
+                self.fields[field].setEnabled(False)
         self.lost.emit()
     
     def victory(self) -> None:
@@ -163,8 +173,8 @@ class Board(QWidget):
         self.wincounter -= 1
         if self.wincounter == self.bombcount :
             for field in self.bombs:
-                self.buttons[field].setIcon(QIcon('./resources/flag.png'))
-                self.buttons[field].setChecked(True)
+                self.fields[field].setIcon(QIcon('./resources/flag.png'))
+                self.fields[field].setChecked(True)
             self.won.emit()
 
 
@@ -210,7 +220,7 @@ class MainWindow(QMainWindow):
         custom.setShortcut('Ctrl+C')
         close = QAction(self.close, '&Exit', self)
         close.setShortcut('Alt+F4')
-        close.triggered.connect(self.destroy)
+        close.triggered.connect(app.quit)
         larger = QAction('&Larger', self)
         larger.setShortcut('Ctrl++')
         larger.triggered.connect(self.enlarge)
@@ -270,10 +280,10 @@ class MainWindow(QMainWindow):
         self.playground.lost.connect(self.handle_failure)
         self.playground.won.connect(self.handle_victory)
         for field in self.playground.fields :
-            self.playground.buttons[field].pressed.connect(self.handle_mouse_press)
-            self.playground.buttons[field].click.connect(self.handle_mouse_release)
-            self.playground.buttons[field].middle.connect(self.handle_mouse_release)
-            self.playground.buttons[field].right.connect(self.message)
+            self.playground.fields[field].pressed.connect(self.handle_mouse_press)
+            self.playground.fields[field].click.connect(self.handle_mouse_release)
+            self.playground.fields[field].middle.connect(self.handle_mouse_release)
+            self.playground.fields[field].right.connect(self.message)
         self.setCentralWidget(self.playground)
     
     def handle_failure(self):
@@ -349,10 +359,14 @@ class MainWindow(QMainWindow):
     
     def paintEvent(self, event):
         """Set fixed size of fields and self"""
-        super().paintEvent(event)
+        font = self.playground.font()
+        font.setPixelSize( int(self.size * 0.7) )
         for field in self.playground.fields:
-            self.playground.buttons[field].setFixedSize(QSize(self.size, self.size))
+            self.playground.fields[field].setFixedSize(QSize(self.size, self.size))
+            self.playground.fields[field].setIconSize(QSize( int(self.size * 0.8), int(self.size * 0.8) ))
+            self.playground.fields[field].setFont(font)
         self.setFixedSize(self.size * self.cols + 18, self.size * self.rows + 106)
+        super().paintEvent(event)
     
     def question_marks(self):
         self.setProperty('question', not self.property('question'))
