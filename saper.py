@@ -186,6 +186,7 @@ class MainWindow(QMainWindow):
         
         self.ui_setup()
         self.beginner_mode()
+        self.beginner.setChecked(True)
         self.show()
     
     def ui_setup(self):
@@ -200,17 +201,22 @@ class MainWindow(QMainWindow):
         self.new = QAction(self.smiley, '&New' , self)
         self.new.setShortcut('Ctrl+N')
         self.new.triggered.connect(self.new_game)
-        beginner = QAction('&Beginner', self)
-        beginner.setShortcut('Ctrl+B')
-        beginner.triggered.connect(self.beginner_mode)
-        advanced = QAction('&Advanced', self)
-        advanced.setShortcut('Ctrl+A')
-        advanced.triggered.connect(self.advanced_mode)
-        expert = QAction('&Expert', self)
-        expert.setShortcut('Ctrl+E')
-        expert.triggered.connect(self.expert_mode)
-        custom = QAction('&Custom', self)
-        custom.setShortcut('Ctrl+C')
+        self.beginner = QAction('&Beginner', self)
+        self.beginner.setCheckable(True)
+        self.beginner.setShortcut('Ctrl+B')
+        self.beginner.triggered.connect(self.beginner_mode)
+        self.advanced = QAction('&Advanced', self)
+        self.advanced.setCheckable(True)
+        self.advanced.setShortcut('Ctrl+A')
+        self.advanced.triggered.connect(self.advanced_mode)
+        self.expert = QAction('&Expert', self)
+        self.expert.setCheckable(True)
+        self.expert.setShortcut('Ctrl+E')
+        self.expert.triggered.connect(self.expert_mode)
+        self.custom = QAction('&Custom', self)
+        self.custom.setCheckable(True)
+        self.custom.setShortcut('Ctrl+C')
+        self.custom.triggered.connect(self.custom_mode)
         close = QAction(self.close, '&Exit', self)
         close.setShortcut('Alt+F4')
         close.triggered.connect(app.quit)
@@ -245,10 +251,10 @@ class MainWindow(QMainWindow):
         game = menu.addMenu('&Game')
         game.addAction(self.new)
         game.addSeparator()
-        game.addAction(beginner)
-        game.addAction(advanced)
-        game.addAction(expert)
-        game.addAction(custom)
+        game.addAction(self.beginner)
+        game.addAction(self.advanced)
+        game.addAction(self.expert)
+        game.addAction(self.custom)
         game.addSeparator()
         game.addAction(close)
         options = menu.addMenu('&Options')
@@ -324,6 +330,9 @@ class MainWindow(QMainWindow):
     
     def beginner_mode(self):
         """Beginner game setup"""
+        self.advanced.setChecked(False)
+        self.expert.setChecked(False)
+        self.custom.setChecked(False)
         self.cols = 8
         self.rows = 8
         self.bombcount = 10
@@ -331,6 +340,9 @@ class MainWindow(QMainWindow):
     
     def advanced_mode(self):
         """Advanced game setup"""
+        self.beginner.setChecked(False)
+        self.expert.setChecked(False)
+        self.custom.setChecked(False)
         self.cols = 16
         self.rows = 16
         self.bombcount = 40
@@ -338,10 +350,20 @@ class MainWindow(QMainWindow):
     
     def expert_mode(self):
         """Expert game setup"""
+        self.beginner.setChecked(False)
+        self.advanced.setChecked(False)
+        self.custom.setChecked(False)
         self.cols = 30
         self.rows = 16
         self.bombcount = 99
         self.new_game()
+    
+    def custom_mode(self):
+        """Custom game setup"""
+        self.beginner.setChecked(False)
+        self.advanced.setChecked(False)
+        self.expert.setChecked(False)
+
     
     def enlarge(self):
         """Make fields bigger"""
