@@ -12,8 +12,6 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget,
 class CoverButton(QPushButton):
     """Button that covers field"""
     click = Signal(tuple)
-    middle = Signal(tuple)
-    pressed = Signal()
     right = Signal(int)
 
     def __init__(self, field: tuple, *args, **kwargs):
@@ -46,16 +44,11 @@ class CoverButton(QPushButton):
                 self.right.emit(self.property('flagged'))
         elif event.button() == Qt.MouseButton.LeftButton :
             self.pressed.emit()
-        elif event.button() == Qt.MouseButton.MiddleButton :
-            if self.isChecked() :
-                self.pressed.emit()
     
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton :
             self.click.emit(self.property('field'))
-        if event.button() == Qt.MouseButton.MiddleButton :
-            if self.isChecked() :
-                self.middle.emit(self.property('field'))
+
 
 class CoverButtonQuestion(CoverButton):
     """Theese modified buttons can be marked with question mark"""
@@ -88,7 +81,7 @@ class Board(QWidget):
         self.bombcount = bombcount
         self.wincounter = x * y
         #make gameboard, layout and fill with covering buttons
-        self.fields = {(i,j) : CoverButtonQuestion((i,j), click=self.uncover, middle=self.mass_uncover) if question else CoverButton((i,j), click=self.uncover, middle=self.mass_uncover) for i in range(x) for j in range(y)}
+        self.fields = {(i,j) : CoverButtonQuestion((i,j)) if question else CoverButton((i,j)) for i in range(x) for j in range(y)}
         self.populate()
         layout = QGridLayout()
         layout.setSpacing(0)
@@ -282,7 +275,6 @@ class MainWindow(QMainWindow):
         for field in self.playground.fields :
             self.playground.fields[field].pressed.connect(self.handle_mouse_press)
             self.playground.fields[field].click.connect(self.handle_mouse_release)
-            self.playground.fields[field].middle.connect(self.handle_mouse_release)
             self.playground.fields[field].right.connect(self.message)
         self.setCentralWidget(self.playground)
     
@@ -302,11 +294,15 @@ class MainWindow(QMainWindow):
         """Change icon to wow"""
         self.new.setIcon(self.wow)
     
-    def handle_mouse_release(self):
+    def handle_mouse_release(self, field):
         """Change icon to smiley, start timer on first move"""
         if not self.timerID :
             self.timerID = self.startTimer(1000)
         self.new.setIcon(self.smiley)
+        if self.playground.fields[field].isChecked() :
+            self.playground.mass_uncover(field)
+        else :
+            self.playground.uncover(field)
     
     def message(self, flagged):
         """Informs how many bombs are left"""
