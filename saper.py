@@ -152,6 +152,22 @@ class Board(QWidget):
                 self.uncover(f)
         return True
     
+    def mass_uncover_safe(self, field) -> bool:
+        """Uncovers non-flagged adjacent fields when adjacent bombs are flagged"""
+        if not self.fields[field].isChecked() :
+            return False
+        counter = 0
+        safeNeighbors = []
+        for f in self.neighborhood(field) :
+            if self.fields[f].property('flagged') :
+                counter += 1
+            else :
+                safeNeighbors.append(f)
+        if counter == self.fields[field].property('number') :
+            for f in safeNeighbors :
+                self.uncover(f)
+        return True
+    
     def failure(self) -> None:
         """Show bombs, deactivate fields, and send lost signal"""
         for field in self.bombs :
@@ -235,6 +251,7 @@ class MainWindow(QMainWindow):
         self.timerID = 0
         self.size = 20
         self.setProperty('question', False)
+        self.setProperty('massuncover', 1)
         
         self.ui_setup()
         self.beginner_mode()
@@ -282,6 +299,15 @@ class MainWindow(QMainWindow):
         question.setShortcut('Ctrl+Q')
         question.setCheckable(True)
         question.triggered.connect(self.question_marks)
+        self.massuncover = QAction('&Uncovering neighbors', self)
+        self.massuncover.setCheckable(True)
+        self.massuncover.setChecked(True)
+        self.massuncover.setShortcut('Ctrl+U')
+        self.massuncover.triggered.connect(self.mass_uncover)
+        self.massuncoversafe = QAction('&Safe neighbors uncovering', self)
+        self.massuncoversafe.setCheckable(True)
+        self.massuncoversafe.setShortcut('Ctrl+S')
+        self.massuncoversafe.triggered.connect(self.mass_uncover_safe)
         #toolbar
         toolbar = QToolBar()
         toolbar.setIconSize(QSize(32, 32))
@@ -314,6 +340,9 @@ class MainWindow(QMainWindow):
         options.addAction(smaller)
         options.addSeparator()
         options.addAction(question)
+        options.addSeparator()
+        options.addAction(self.massuncover)
+        options.addAction(self.massuncoversafe)
     
     def new_game(self):
         """Set up for a new game"""
@@ -357,8 +386,10 @@ class MainWindow(QMainWindow):
         if not self.timerID :
             self.timerID = self.startTimer(1000)
         self.new.setIcon(self.smiley)
-        if self.playground.fields[field].isChecked() :
+        if self.playground.fields[field].isChecked() and self.property('massuncover') == 1 :
             self.playground.mass_uncover(field)
+        elif self.playground.fields[field].isChecked() and self.property('massuncover') == 2 :
+            self.playground.mass_uncover_safe(field)
         else :
             self.playground.uncover(field)
     
@@ -444,6 +475,22 @@ class MainWindow(QMainWindow):
     
     def question_marks(self):
         self.setProperty('question', not self.property('question'))
+        self.new_game()
+    
+    def mass_uncover(self):
+        self.massuncoversafe.setChecked(False)
+        if self.property('massuncover') :
+            self.setProperty('massuncover', 0)
+        if not self.property('massuncover') :
+            self.setProperty('massuncover', 1)
+        self.new_game()
+    
+    def mass_uncover_safe(self):
+        self.massuncover.setChecked(False)
+        if self.property('massuncover') :
+            self.setProperty('massuncover', 0)
+        if not self.property('massuncover') :
+            self.setProperty('massuncover', 2)
         self.new_game()
 
 
