@@ -4,10 +4,10 @@ import sys
 import random
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtCore import pyqtSignal as Signal
-from PyQt6.QtGui import QIcon, QPixmap, QAction, QCursor
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget,
-                             QPushButton, QGridLayout, QLabel,
-                             QToolBar, QSizePolicy)
+from PyQt6.QtGui import QIcon, QPixmap, QAction, QCursor, QIntValidator
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton,
+                             QGridLayout, QLabel, QToolBar, QSizePolicy,
+                             QDialog, QDialogButtonBox, QLineEdit, QMessageBox)
 
 class CoverButton(QPushButton):
     """Button that covers field"""
@@ -75,13 +75,13 @@ class Board(QWidget):
     lost = Signal()
     won = Signal()
     
-    def __init__(self, x, y, bombcount, question=False, *args, **kwargs):
+    def __init__(self, rows, cols, bombcount, question=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
         
         self.bombcount = bombcount
-        self.wincounter = x * y
+        self.wincounter = rows * cols
         #make gameboard, layout and fill with covering buttons
-        self.fields = {(i,j) : CoverButtonQuestion((i,j)) if question else CoverButton((i,j)) for i in range(x) for j in range(y)}
+        self.fields = {(i,j) : CoverButtonQuestion((i,j)) if question else CoverButton((i,j)) for i in range(rows) for j in range(cols)}
         self.populate()
         layout = QGridLayout()
         layout.setSpacing(0)
@@ -134,6 +134,7 @@ class Board(QWidget):
         #loose when you click a bomb
         elif field in self.bombs :
             self.failure()
+            return True
         #field in self.empty - recurrent uncovering
         else :
             for f in self.neighborhood(field):
@@ -169,6 +170,57 @@ class Board(QWidget):
                 self.fields[field].setIcon(QIcon('./resources/flag.png'))
                 self.fields[field].setChecked(True)
             self.won.emit()
+
+
+class CustomSetupDialog(QDialog):
+    """Dialog window to setup custom rows, columns and bombs count"""
+    
+    def __init__(self, parent=None, *args, **kwargs) -> None:
+        super().__init__(parent, *args, **kwargs)
+        self.parent = parent
+        self.setWindowTitle('Setup custom mode')
+        #standard ok/cancel buttons
+        btns = QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        buttons = QDialogButtonBox(btns)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.close)
+        #input fields with labels
+        validator = QIntValidator(0, 5000, self)
+        rlabel = QLabel('Rows:')
+        rlabel.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.rows = QLineEdit(str(parent.rows), maxLength=2)
+        self.rows.setMaximumWidth(50)
+        self.rows.setValidator(validator)
+        clabel = QLabel('Columns:')
+        clabel.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.cols = QLineEdit(str(parent.cols), maxLength=2)
+        self.cols.setMaximumWidth(50)
+        self.cols.setValidator(validator)
+        blabel = QLabel('Number of bombs:')
+        blabel.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.bombcount = QLineEdit(str(parent.bombcount), maxLength=4)
+        self.bombcount.setMaximumWidth(50)
+        self.bombcount.setValidator(validator)
+        #layout
+        layout = QGridLayout()
+        layout.addWidget(rlabel, 0, 0)
+        layout.addWidget(self.rows, 0, 1)
+        layout.addWidget(clabel, 1, 0)
+        layout.addWidget(self.cols, 1, 1)
+        layout.addWidget(blabel, 2, 0)
+        layout.addWidget(self.bombcount, 2, 1)
+        layout.addWidget(buttons, 3, 0, 1, 2, Qt.AlignmentFlag.AlignCenter)
+        self.setLayout(layout)
+    
+    def accept(self):
+        """First check if there's no more bombs than fields, then apply"""
+        if int(self.bombcount.text()) < int(self.rows.text()) * int(self.cols.text()):
+            self.parent.rows = int(self.rows.text())
+            self.parent.cols = int(self.cols.text())
+            self.parent.bombcount = int(self.bombcount.text())
+            self.done(1)
+        else :
+            QMessageBox.critical(self, 'Invalid', "Too many bombs for given board dimensions")
 
 
 class MainWindow(QMainWindow):
@@ -333,8 +385,8 @@ class MainWindow(QMainWindow):
         self.advanced.setChecked(False)
         self.expert.setChecked(False)
         self.custom.setChecked(False)
-        self.cols = 8
         self.rows = 8
+        self.cols = 8
         self.bombcount = 10
         self.new_game()
     
@@ -343,8 +395,8 @@ class MainWindow(QMainWindow):
         self.beginner.setChecked(False)
         self.expert.setChecked(False)
         self.custom.setChecked(False)
-        self.cols = 16
         self.rows = 16
+        self.cols = 16
         self.bombcount = 40
         self.new_game()
     
@@ -353,17 +405,21 @@ class MainWindow(QMainWindow):
         self.beginner.setChecked(False)
         self.advanced.setChecked(False)
         self.custom.setChecked(False)
-        self.cols = 30
         self.rows = 16
+        self.cols = 30
         self.bombcount = 99
         self.new_game()
     
     def custom_mode(self):
         """Custom game setup"""
-        self.beginner.setChecked(False)
-        self.advanced.setChecked(False)
-        self.expert.setChecked(False)
-
+        dialog = CustomSetupDialog(self)
+        if dialog.exec() :
+            self.beginner.setChecked(False)
+            self.advanced.setChecked(False)
+            self.expert.setChecked(False)
+            self.new_game()
+        else :
+            self.custom.setChecked(False)
     
     def enlarge(self):
         """Make fields bigger"""
