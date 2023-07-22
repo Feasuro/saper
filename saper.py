@@ -2,19 +2,33 @@
 
 import sys
 import random
+import csv
+import os
+import time
+
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtCore import pyqtSignal as Signal
-from PyQt6.QtGui import QIcon, QPixmap, QAction, QCursor, QIntValidator
+from PyQt6.QtGui import QIcon, QPixmap, QAction, QIntValidator
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton,
                              QGridLayout, QLabel, QToolBar, QSizePolicy,
-                             QDialog, QDialogButtonBox, QLineEdit, QMessageBox)
+                             QDialog, QDialogButtonBox, QInputDialog, QLineEdit, QMessageBox)
+
+def convert_seconds(seconds: int | str) -> str:
+    if type(seconds) == str :
+        seconds = int(seconds)
+    if seconds < 60 :
+        return f'{seconds}s'
+    elif seconds < 3600 :
+        return f'{seconds // 60}m{seconds % 60}s'
+    else :
+        return f'{seconds // 3600}h{seconds // 60}m{seconds % 60}s'
 
 class CoverButton(QPushButton):
     """Button that covers field"""
     click = Signal(tuple)
     right = Signal(int)
 
-    def __init__(self, field: tuple, *args, **kwargs):
+    def __init__(self, field: tuple, *args, **kwargs) -> None:
         """Button is aware of it's position that is emitted when clicked"""
         super().__init__(*args, **kwargs)
         self.setCheckable(True)
@@ -33,6 +47,7 @@ class CoverButton(QPushButton):
                            ''')
     
     def mousePressEvent(self, event):
+        """Change icon when right-click, send signal when left-click"""
         if event.button() == Qt.MouseButton.RightButton :
             if not self.isChecked() :
                 if self.property('flagged'):
@@ -46,6 +61,7 @@ class CoverButton(QPushButton):
             self.pressed.emit()
     
     def mouseReleaseEvent(self, event):
+        """Emit coordinates of clicked button"""
         if event.button() == Qt.MouseButton.LeftButton :
             self.click.emit(self.property('field'))
 
@@ -75,7 +91,7 @@ class Board(QWidget):
     lost = Signal()
     won = Signal()
     
-    def __init__(self, rows, cols, bombcount, question=False, *args, **kwargs):
+    def __init__(self, rows, cols, bombcount, question=False, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         
         self.bombcount = bombcount
@@ -188,77 +204,26 @@ class Board(QWidget):
             self.won.emit()
 
 
-class CustomSetupDialog(QDialog):
-    """Dialog window to setup custom rows, columns and bombs count"""
-    
-    def __init__(self, parent=None, *args, **kwargs) -> None:
-        super().__init__(parent, *args, **kwargs)
-        self.parent = parent
-        self.setWindowTitle('Setup custom mode')
-        #standard ok/cancel buttons
-        btns = QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        buttons = QDialogButtonBox(btns)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.close)
-        #input fields with labels
-        validator = QIntValidator(0, 5000, self)
-        rlabel = QLabel('Rows:')
-        rlabel.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self.rows = QLineEdit(str(parent.rows), maxLength=2)
-        self.rows.setMaximumWidth(50)
-        self.rows.setValidator(validator)
-        clabel = QLabel('Columns:')
-        clabel.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self.cols = QLineEdit(str(parent.cols), maxLength=2)
-        self.cols.setMaximumWidth(50)
-        self.cols.setValidator(validator)
-        blabel = QLabel('Number of bombs:')
-        blabel.setAlignment(Qt.AlignmentFlag.AlignRight)
-        self.bombcount = QLineEdit(str(parent.bombcount), maxLength=4)
-        self.bombcount.setMaximumWidth(50)
-        self.bombcount.setValidator(validator)
-        #layout
-        layout = QGridLayout()
-        layout.addWidget(rlabel, 0, 0)
-        layout.addWidget(self.rows, 0, 1)
-        layout.addWidget(clabel, 1, 0)
-        layout.addWidget(self.cols, 1, 1)
-        layout.addWidget(blabel, 2, 0)
-        layout.addWidget(self.bombcount, 2, 1)
-        layout.addWidget(buttons, 3, 0, 1, 2, Qt.AlignmentFlag.AlignCenter)
-        self.setLayout(layout)
-    
-    def accept(self):
-        """First check if there's no more bombs than fields, then apply"""
-        if int(self.bombcount.text()) < int(self.rows.text()) * int(self.cols.text()):
-            self.parent.rows = int(self.rows.text())
-            self.parent.cols = int(self.cols.text())
-            self.parent.bombcount = int(self.bombcount.text())
-            self.done(1)
-        else :
-            QMessageBox.critical(self, 'Invalid', "Too many bombs for given board dimensions")
-
-
 class MainWindow(QMainWindow):
     """Provides window interface for playing saper"""
     
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         
-        #title, icon and timer
+        #title, icon, timer and defaults
         self.setWindowTitle('Saper')
         self.setWindowIcon(QIcon('./resources/mine.png'))
         self.timerID = 0
         self.size = 20
         self.setProperty('question', False)
         self.setProperty('massuncover', 1)
-        
+        #make the window and game
         self.ui_setup()
         self.beginner_mode()
         self.beginner.setChecked(True)
         self.show()
     
-    def ui_setup(self):
+    def ui_setup(self) -> None:
         """Arranges all window elements."""
         #icons
         self.smiley = QIcon('./resources/smiley.png')
@@ -267,7 +232,7 @@ class MainWindow(QMainWindow):
         self.glasses = QIcon('./resources/glasses.png')
         self.close = QIcon('./resources/exit.png')
         #actions
-        self.new = QAction(self.smiley, '&New' , self)
+        self.new = QAction(self.smiley, '&New', self)
         self.new.setShortcut('Ctrl+N')
         self.new.triggered.connect(self.new_game)
         self.beginner = QAction('&Beginner', self)
@@ -308,6 +273,9 @@ class MainWindow(QMainWindow):
         self.massuncoversafe.setCheckable(True)
         self.massuncoversafe.setShortcut('Ctrl+S')
         self.massuncoversafe.triggered.connect(self.mass_uncover_safe)
+        records = QAction('&Records', self)
+        records.setShortcut('Ctrl+R')
+        records.triggered.connect(self.show_records)
         #toolbar
         toolbar = QToolBar()
         toolbar.setIconSize(QSize(32, 32))
@@ -328,6 +296,7 @@ class MainWindow(QMainWindow):
         menu = self.menuBar()
         game = menu.addMenu('&Game')
         game.addAction(self.new)
+        game.addAction(records)
         game.addSeparator()
         game.addAction(self.beginner)
         game.addAction(self.advanced)
@@ -344,12 +313,13 @@ class MainWindow(QMainWindow):
         options.addAction(self.massuncover)
         options.addAction(self.massuncoversafe)
     
-    def new_game(self):
+    def new_game(self) -> None:
         """Set up for a new game"""
         self.new.setIcon(self.smiley)
         #be sure that timer is reset and shows 0
-        self.killTimer(self.timerID)
-        self.timerID = 0
+        if self.timerID :
+            self.killTimer(self.timerID)
+            self.timerID = 0
         self.seconds = -1
         self.timerEvent(None)
         #reset bomb counter
@@ -365,23 +335,47 @@ class MainWindow(QMainWindow):
             self.playground.fields[field].right.connect(self.message)
         self.setCentralWidget(self.playground)
     
-    def handle_failure(self):
+    def handle_failure(self) -> None:
         """Communicate failure to the player"""
         self.killTimer(self.timerID)
+        self.timerID = 0
         self.statusbar.showMessage('You lost!')
         self.new.setIcon(self.sad)
 
-    def handle_victory(self):
-        """Communicate victory to the player"""
+    def handle_victory(self) -> None:
+        """Communicate victory to the player, and check record"""
         self.killTimer(self.timerID)
+        self.timerID = 0
         self.statusbar.showMessage('Victory!')
         self.new.setIcon(self.glasses)
+        #saving best time
+        fieldnames = ['date', 'mode', 'time', 'name']
+        if os.path.exists('./records.csv'):
+            with open('./records.csv', 'r+', newline='', encoding='utf-8') as records :
+                reader = csv.DictReader(records, dialect='unix')
+                for row in reader :
+                    if row['mode'] == self.property('mode') and int(row['time']) < self.seconds :
+                        break
+                else :
+                    name, ok = QInputDialog.getText(self, 'New record!', 'Your name:')
+                    if ok:
+                        writer = csv.DictWriter(records, fieldnames=fieldnames, dialect='unix')
+                        writer.writerow({'date': time.strftime('%x'), 'mode': self.property('mode'), 'time': self.seconds, 'name': name})
+            if ok : self.show_records()
+        else :
+            name, ok = QInputDialog.getText(self, 'New record!', 'Your name:')
+            if ok:
+                with open('./records.csv', 'w', newline='', encoding='utf-8') as records :
+                    writer = csv.DictWriter(records, fieldnames=fieldnames, dialect='unix')
+                    writer.writeheader()
+                    writer.writerow({'date': time.strftime('%x'), 'mode': self.property('mode'), 'time': self.seconds, 'name': name})
+                self.show_records()
     
-    def handle_mouse_press(self):
+    def handle_mouse_press(self) -> None:
         """Change icon to wow"""
         self.new.setIcon(self.wow)
     
-    def handle_mouse_release(self, field):
+    def handle_mouse_release(self, field) -> None:
         """Change icon to smiley, start timer on first move"""
         if not self.timerID :
             self.timerID = self.startTimer(1000)
@@ -393,7 +387,7 @@ class MainWindow(QMainWindow):
         else :
             self.playground.uncover(field)
     
-    def message(self, flagged):
+    def message(self, flagged) -> None:
         """Informs how many bombs are left"""
         if flagged == 1 :
             self.bombsleft -= 1
@@ -401,17 +395,12 @@ class MainWindow(QMainWindow):
             self.bombsleft += 1
         self.statusbar.showMessage(f'{self.bombsleft} bombs left')
     
-    def timerEvent(self, event):
+    def timerEvent(self, event) -> None:
         """Counts elapsed time of a game"""
         self.seconds += 1
-        if self.seconds < 60 :
-            self.clock.setText(f'Time: {self.seconds}s')
-        elif self.seconds < 3600 :
-            self.clock.setText(f'Time: {self.seconds // 60}m{self.seconds % 60}s')
-        else :
-            self.clock.setText(f'Time: {self.seconds // 3600}h{self.seconds // 60}m{self.seconds % 60}s')
+        self.clock.setText('Time: ' + convert_seconds(self.seconds))
     
-    def beginner_mode(self):
+    def beginner_mode(self) -> None:
         """Beginner game setup"""
         self.advanced.setChecked(False)
         self.expert.setChecked(False)
@@ -419,9 +408,10 @@ class MainWindow(QMainWindow):
         self.rows = 8
         self.cols = 8
         self.bombcount = 10
+        self.setProperty('mode', 'b')
         self.new_game()
     
-    def advanced_mode(self):
+    def advanced_mode(self) -> None:
         """Advanced game setup"""
         self.beginner.setChecked(False)
         self.expert.setChecked(False)
@@ -429,9 +419,10 @@ class MainWindow(QMainWindow):
         self.rows = 16
         self.cols = 16
         self.bombcount = 40
+        self.setProperty('mode', 'a')
         self.new_game()
     
-    def expert_mode(self):
+    def expert_mode(self) -> None:
         """Expert game setup"""
         self.beginner.setChecked(False)
         self.advanced.setChecked(False)
@@ -439,31 +430,33 @@ class MainWindow(QMainWindow):
         self.rows = 16
         self.cols = 30
         self.bombcount = 99
+        self.setProperty('mode', 'e')
         self.new_game()
     
-    def custom_mode(self):
+    def custom_mode(self) -> None:
         """Custom game setup"""
         dialog = CustomSetupDialog(self)
         if dialog.exec() :
             self.beginner.setChecked(False)
             self.advanced.setChecked(False)
             self.expert.setChecked(False)
+            self.setProperty('mode', 'c')
             self.new_game()
         else :
             self.custom.setChecked(False)
     
-    def enlarge(self):
+    def enlarge(self) -> None:
         """Make fields bigger"""
         self.size += 2
         self.update()
     
-    def zoomout(self):
+    def zoomout(self) -> None:
         """Make fields smaller"""
         self.size -= 2
         self.update()
     
-    def paintEvent(self, event):
-        """Set fixed size of fields and self"""
+    def paintEvent(self, event) -> None:
+        """Set fixed sizes of self, fields, fonts and icons"""
         font = self.playground.font()
         font.setPixelSize( int(self.size * 0.7) )
         for field in self.playground.fields:
@@ -473,11 +466,13 @@ class MainWindow(QMainWindow):
         self.setFixedSize(self.size * self.cols + 18, self.size * self.rows + 106)
         super().paintEvent(event)
     
-    def question_marks(self):
+    def question_marks(self) -> None:
+        """Toggle marking fields with question mark"""
         self.setProperty('question', not self.property('question'))
         self.new_game()
     
-    def mass_uncover(self):
+    def mass_uncover(self) -> None:
+        """Toggle option for uncovering neighbors"""
         self.massuncoversafe.setChecked(False)
         if self.property('massuncover') :
             self.setProperty('massuncover', 0)
@@ -485,13 +480,116 @@ class MainWindow(QMainWindow):
             self.setProperty('massuncover', 1)
         self.new_game()
     
-    def mass_uncover_safe(self):
+    def mass_uncover_safe(self) -> None:
+        """Toggle option for uncovering neighbors - safe version"""
         self.massuncover.setChecked(False)
         if self.property('massuncover') :
             self.setProperty('massuncover', 0)
         if not self.property('massuncover') :
             self.setProperty('massuncover', 2)
         self.new_game()
+    
+    def show_records(self) -> None:
+        """Display window with saved records"""
+        if os.path.exists('./records.csv'):
+            RecordsWindow(self).exec()
+        else :
+            QMessageBox.information(self, 'Not found', 'No records have been saved yet.')
+
+
+class CustomSetupDialog(QDialog):
+    """Dialog window to setup custom rows, columns and bombs count"""
+    
+    def __init__(self, parent=None, *args, **kwargs) -> None:
+        super().__init__(parent, *args, **kwargs)
+        self.parent = parent
+        self.setWindowTitle('Setup custom mode')
+        #standard ok/cancel buttons
+        btns = QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        buttons = QDialogButtonBox(btns)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.close)
+        #input fields with labels
+        validator = QIntValidator(0, 5000, self)
+        rlabel = QLabel('Rows:')
+        rlabel.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.rows = QLineEdit(str(parent.rows), maxLength=2)
+        self.rows.setMaximumWidth(50)
+        self.rows.setValidator(validator)
+        clabel = QLabel('Columns:')
+        clabel.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.cols = QLineEdit(str(parent.cols), maxLength=2)
+        self.cols.setMaximumWidth(50)
+        self.cols.setValidator(validator)
+        blabel = QLabel('Number of bombs:')
+        blabel.setAlignment(Qt.AlignmentFlag.AlignRight)
+        self.bombcount = QLineEdit(str(parent.bombcount), maxLength=4)
+        self.bombcount.setMaximumWidth(50)
+        self.bombcount.setValidator(validator)
+        #layout
+        layout = QGridLayout()
+        layout.addWidget(rlabel, 0, 0)
+        layout.addWidget(self.rows, 0, 1)
+        layout.addWidget(clabel, 1, 0)
+        layout.addWidget(self.cols, 1, 1)
+        layout.addWidget(blabel, 2, 0)
+        layout.addWidget(self.bombcount, 2, 1)
+        layout.addWidget(buttons, 3, 0, 1, 2, Qt.AlignmentFlag.AlignCenter)
+        self.setLayout(layout)
+    
+    def accept(self) -> None:
+        """First check if there's no more bombs than fields, then apply"""
+        if int(self.bombcount.text()) < int(self.rows.text()) * int(self.cols.text()):
+            self.parent.rows = int(self.rows.text())
+            self.parent.cols = int(self.cols.text())
+            self.parent.bombcount = int(self.bombcount.text())
+            self.done(1)
+        else :
+            QMessageBox.critical(self, 'Invalid', "Too many bombs for given board dimensions")
+
+
+class RecordsWindow(QDialog):
+    """Dialog window that displays records"""
+    
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        #title and 'ok' button
+        self.setWindowTitle('Best times')
+        button = QDialogButtonBox( QDialogButtonBox.StandardButton.Ok )
+        button.accepted.connect(self.close)
+        #layout
+        layout = QGridLayout()
+        layout.addWidget(QLabel('Beginner'), 0, 0, 1, 3)
+        layout.addWidget(QLabel('Advanced'), 0, 3, 1, 3)
+        layout.addWidget(QLabel('Expert'), 0, 6, 1, 3)
+        for i in range(0, 7, 3):
+            layout.addWidget(QLabel('Date'), 1, i)
+            layout.addWidget(QLabel('Name'), 1, i+1)
+            layout.addWidget(QLabel('Time'), 1, i+2)
+        #get records from file
+        with open('./records.csv', 'r', newline='', encoding='utf-8') as records :
+            reader = csv.DictReader(records, dialect='unix')
+            b, a, e = 2, 2, 2
+            for row in reader :
+                match row['mode']:
+                    case 'b':
+                        layout.addWidget(QLabel(row['date']), b, 0)
+                        layout.addWidget(QLabel(row['name']), b, 1)
+                        layout.addWidget(QLabel(convert_seconds(row['time'])), b, 2)
+                        b += 1
+                    case 'a':
+                        layout.addWidget(QLabel(row['date']), a, 3)
+                        layout.addWidget(QLabel(row['name']), a, 4)
+                        layout.addWidget(QLabel(convert_seconds(row['time'])), a, 5)
+                        a += 1
+                    case 'e':
+                        layout.addWidget(QLabel(row['date']), e, 6)
+                        layout.addWidget(QLabel(row['name']), e, 7)
+                        layout.addWidget(QLabel(convert_seconds(row['time'])), e, 8)
+                        e += 1
+        #add button and set layout
+        layout.addWidget(button, max(b, a, e), 0, 1, 9, Qt.AlignmentFlag.AlignCenter)
+        self.setLayout(layout)
 
 
 if __name__ == '__main__':
