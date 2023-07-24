@@ -3,15 +3,14 @@
 import sys
 import random
 import csv
-import os
 import time
 
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtCore import pyqtSignal as Signal
-from PyQt6.QtGui import QIcon, QPixmap, QAction, QIntValidator
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton,
-                             QGridLayout, QLabel, QToolBar, QSizePolicy,
-                             QDialog, QDialogButtonBox, QInputDialog, QLineEdit, QMessageBox)
+from PyQt6.QtGui import QIcon, QPixmap, QAction, QIntValidator, QCursor
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QPushButton, QLabel,
+                             QGridLayout, QToolBar, QSizePolicy, QMessageBox,
+                             QDialog, QDialogButtonBox, QInputDialog, QLineEdit)
 
 def convert_seconds(seconds: int | str) -> str:
     if type(seconds) == str :
@@ -25,7 +24,9 @@ def convert_seconds(seconds: int | str) -> str:
 
 class CoverButton(QPushButton):
     """Button that covers field"""
-    click = Signal(tuple)
+    clicked = Signal(tuple)
+    pressed = Signal(tuple)
+    released = Signal(tuple)
     right = Signal(int)
 
     def __init__(self, field: tuple, *args, **kwargs) -> None:
@@ -58,12 +59,22 @@ class CoverButton(QPushButton):
                     self.setProperty('flagged', 1)
                 self.right.emit(self.property('flagged'))
         elif event.button() == Qt.MouseButton.LeftButton :
-            self.pressed.emit()
+            self.pressed.emit(self.property('field'))
     
     def mouseReleaseEvent(self, event):
         """Emit coordinates of clicked button"""
         if event.button() == Qt.MouseButton.LeftButton :
-            self.click.emit(self.property('field'))
+            self.released.emit(self.property('field'))
+            if self.mapFromGlobal(QCursor().pos()) in self.rect():
+                self.clicked.emit(self.property('field'))
+    
+    def mouseMoveEvent(self, event):
+        """Sets button up/down according to mouse position"""
+        if Qt.MouseButton.LeftButton in app.mouseButtons() :
+            if self.mapFromGlobal(QCursor().pos()) in self.rect():
+                self.pressed.emit(self.property('field'))
+            else:
+                self.released.emit(self.property('field'))
 
 
 class CoverButtonQuestion(CoverButton):
@@ -183,6 +194,22 @@ class Board(QWidget):
             for f in safeNeighbors :
                 self.uncover(f)
         return True
+    
+    def set_down(self, field) -> None:
+        if self.fields[field].isChecked():
+            for f in self.neighborhood(field):
+                if not self.fields[f].isChecked() and not self.fields[f].property('flagged') :
+                    self.fields[f].setDown(True)
+        else:
+            self.fields[field].setDown(True)
+    
+    def set_up(self, field) -> None:
+        if self.fields[field].isChecked():
+            for f in self.neighborhood(field):
+                if not self.fields[f].isChecked() and not self.fields[f].property('flagged') :
+                    self.fields[f].setDown(False)
+        else:
+            self.fields[field].setDown(False)
     
     def failure(self) -> None:
         """Show bombs, deactivate fields, and send lost signal"""
@@ -331,7 +358,8 @@ class MainWindow(QMainWindow):
         self.playground.won.connect(self.handle_victory)
         for field in self.playground.fields :
             self.playground.fields[field].pressed.connect(self.handle_mouse_press)
-            self.playground.fields[field].click.connect(self.handle_mouse_release)
+            self.playground.fields[field].released.connect(self.handle_mouse_release)
+            self.playground.fields[field].clicked.connect(self.handle_mouse_click)
             self.playground.fields[field].right.connect(self.message)
         self.setCentralWidget(self.playground)
     
@@ -349,8 +377,9 @@ class MainWindow(QMainWindow):
         self.statusbar.showMessage('Victory!')
         self.new.setIcon(self.glasses)
         #saving best time
-        fieldnames = ['date', 'mode', 'time', 'name']
-        if os.path.exists('./records.csv'):
+        fieldnames = ['mode', 'date', 'name', 'time']
+        ok = False
+        try:
             with open('./records.csv', 'r+', newline='', encoding='utf-8') as records :
                 reader = csv.DictReader(records, dialect='unix')
                 for row in reader :
@@ -360,26 +389,31 @@ class MainWindow(QMainWindow):
                     name, ok = QInputDialog.getText(self, 'New record!', 'Your name:')
                     if ok:
                         writer = csv.DictWriter(records, fieldnames=fieldnames, dialect='unix')
-                        writer.writerow({'date': time.strftime('%x'), 'mode': self.property('mode'), 'time': self.seconds, 'name': name})
-            if ok : self.show_records()
-        else :
+                        writer.writerow({'mode': self.property('mode'), 'date': time.strftime('%x'), 'name': name, 'time': self.seconds})
+        except FileNotFoundError:
             name, ok = QInputDialog.getText(self, 'New record!', 'Your name:')
             if ok:
                 with open('./records.csv', 'w', newline='', encoding='utf-8') as records :
                     writer = csv.DictWriter(records, fieldnames=fieldnames, dialect='unix')
                     writer.writeheader()
-                    writer.writerow({'date': time.strftime('%x'), 'mode': self.property('mode'), 'time': self.seconds, 'name': name})
-                self.show_records()
+                    writer.writerow({'mode': self.property('mode'), 'date': time.strftime('%x'), 'name': name, 'time': self.seconds})
+        finally:
+            if ok : self.show_records()
     
-    def handle_mouse_press(self) -> None:
+    def handle_mouse_press(self, field) -> None:
         """Change icon to wow"""
         self.new.setIcon(self.wow)
+        self.playground.set_down(field)
     
     def handle_mouse_release(self, field) -> None:
+        """Change icon back to smiley"""
+        self.new.setIcon(self.smiley)
+        self.playground.set_up(field)
+    
+    def handle_mouse_click(self, field) -> None:
         """Change icon to smiley, start timer on first move"""
         if not self.timerID :
             self.timerID = self.startTimer(1000)
-        self.new.setIcon(self.smiley)
         if self.playground.fields[field].isChecked() and self.property('massuncover') == 1 :
             self.playground.mass_uncover(field)
         elif self.playground.fields[field].isChecked() and self.property('massuncover') == 2 :
@@ -491,9 +525,9 @@ class MainWindow(QMainWindow):
     
     def show_records(self) -> None:
         """Display window with saved records"""
-        if os.path.exists('./records.csv'):
+        try:
             RecordsWindow(self).exec()
-        else :
+        except FileNotFoundError:
             QMessageBox.information(self, 'Not found', 'No records have been saved yet.')
 
 
