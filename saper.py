@@ -27,7 +27,7 @@ class CoverButton(QPushButton):
     clicked = Signal(tuple)
     pressed = Signal(tuple)
     released = Signal(tuple)
-    right = Signal(int)
+    right = Signal(tuple)
 
     def __init__(self, field: tuple, *args, **kwargs) -> None:
         """Button is aware of it's position that is emitted when clicked"""
@@ -52,12 +52,10 @@ class CoverButton(QPushButton):
         if event.button() == Qt.MouseButton.RightButton :
             if not self.isChecked() :
                 if self.property('flagged'):
-                    self.setIcon(QIcon())
                     self.setProperty('flagged', 0)
                 else:
-                    self.setIcon(QIcon('./resources/flag.png'))
                     self.setProperty('flagged', 1)
-                self.right.emit(self.property('flagged'))
+                self.right.emit(self.property('field'))
         elif event.button() == Qt.MouseButton.LeftButton :
             self.pressed.emit(self.property('field'))
     
@@ -84,15 +82,12 @@ class CoverButtonQuestion(CoverButton):
             if not self.isChecked() :
                 match self.property('flagged'):
                     case 0:
-                        self.setIcon(QIcon('./resources/flag.png'))
                         self.setProperty('flagged', 1)
                     case 1:
-                        self.setIcon(QIcon('./resources/question.png'))
                         self.setProperty('flagged', 2)
                     case 2:
-                        self.setIcon(QIcon())
                         self.setProperty('flagged', 0)
-                self.right.emit(self.property('flagged'))
+                self.right.emit(self.property('field'))
         else :
             super().mousePressEvent(event)
 
@@ -104,6 +99,14 @@ class Board(QWidget):
     
     def __init__(self, rows, cols, bombcount, question=False, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
+        #icons
+        self.noicon = QIcon()
+        self.flag = QIcon('./resources/flag.png')
+        self.flag.addFile('./resources/flag.png', mode=QIcon.Mode.Disabled)
+        self.mine = QIcon('./resources/mine.png')
+        self.mine.addFile('./resources/mine.png', mode=QIcon.Mode.Disabled)
+        self.question = QIcon('./resources/question.png')
+        self.question.addFile('./resources/question.png', mode=QIcon.Mode.Disabled)
         
         self.bombcount = bombcount
         self.wincounter = rows * cols
@@ -148,11 +151,21 @@ class Board(QWidget):
                     neighbors.append((i,j))
         return neighbors
     
+    def set_icon(self, field) -> None:
+        print('debug:', self.fields[field].property('flagged'))
+        match self.fields[field].property('flagged'):
+            case 0:
+                self.fields[field].setIcon(self.noicon)
+            case 1:
+                self.fields[field].setIcon(self.flag)
+            case 2:
+                self.fields[field].setIcon(self.question)
+    
     def uncover(self, field) -> bool:
         """Method reveals content of the field(s)"""
         if self.fields[field].isChecked() :
             return False
-        self.fields[field].setIcon(QIcon())
+        self.fields[field].setIcon(self.noicon)
         self.fields[field].setProperty('flagged', 0)
         self.fields[field].setChecked(True)
         #uncover a number
@@ -214,7 +227,7 @@ class Board(QWidget):
     def failure(self) -> None:
         """Show bombs, deactivate fields, and send lost signal"""
         for field in self.bombs :
-            self.fields[field].setIcon( QIcon('./resources/mine.png') )
+            self.fields[field].setIcon(self.mine)
             self.fields[field].setChecked(True)
         for field in self.fields :
             if not self.fields[field].isChecked():
@@ -226,8 +239,9 @@ class Board(QWidget):
         self.wincounter -= 1
         if self.wincounter == self.bombcount :
             for field in self.bombs:
-                self.fields[field].setIcon(QIcon('./resources/flag.png'))
-                self.fields[field].setChecked(True)
+                self.fields[field].setIcon(self.flag)
+            for field in self.fields :
+                self.fields[field].setEnabled(False)
             self.won.emit()
 
 
@@ -421,8 +435,10 @@ class MainWindow(QMainWindow):
         else :
             self.playground.uncover(field)
     
-    def message(self, flagged) -> None:
-        """Informs how many bombs are left"""
+    def message(self, field) -> None:
+        """Changes icon and informs how many bombs are left"""
+        self.playground.set_icon(field)
+        flagged = self.playground.fields[field].property('flagged')
         if flagged == 1 :
             self.bombsleft -= 1
         elif ( self.property('question') and flagged == 2 ) or ( not self.property('question') and flagged == 0 ):
