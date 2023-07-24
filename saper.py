@@ -63,13 +63,13 @@ class CoverButton(QPushButton):
         """Emit coordinates of clicked button"""
         if event.button() == Qt.MouseButton.LeftButton :
             self.released.emit(self.property('field'))
-            if self.mapFromGlobal(QCursor().pos()) in self.rect():
+            if event.pos() in self.rect():
                 self.clicked.emit(self.property('field'))
     
     def mouseMoveEvent(self, event):
         """Sets button up/down according to mouse position"""
         if Qt.MouseButton.LeftButton in app.mouseButtons() :
-            if self.mapFromGlobal(QCursor().pos()) in self.rect():
+            if event.pos() in self.rect():
                 self.pressed.emit(self.property('field'))
             else:
                 self.released.emit(self.property('field'))
@@ -107,7 +107,7 @@ class Board(QWidget):
         self.mine.addFile('./resources/mine.png', mode=QIcon.Mode.Disabled)
         self.question = QIcon('./resources/question.png')
         self.question.addFile('./resources/question.png', mode=QIcon.Mode.Disabled)
-        
+        #counters
         self.bombcount = bombcount
         self.wincounter = rows * cols
         #make gameboard, layout and fill with covering buttons
@@ -151,8 +151,19 @@ class Board(QWidget):
                     neighbors.append((i,j))
         return neighbors
     
+    def fields_to_uncover(self, field: tuple) -> list:
+        """Return list of un-checked and un-flagged fields"""
+        result = []
+        if self.fields[field].isChecked():
+            for f in self.neighborhood(field):
+                if not self.fields[f].isChecked() and not self.fields[f].property('flagged'):
+                    result.append(f)
+        else:
+            result.append(field)
+        return result
+    
     def set_icon(self, field) -> None:
-        print('debug:', self.fields[field].property('flagged'))
+        """Set button's icon according to property"""
         match self.fields[field].property('flagged'):
             case 0:
                 self.fields[field].setIcon(self.noicon)
@@ -183,46 +194,31 @@ class Board(QWidget):
         self.victory()
         return True
     
-    def mass_uncover(self, field) -> bool:
+    def mass_uncover(self, field) -> None:
         """Uncovers all non-flagged adjacent fields"""
-        if not self.fields[field].isChecked() :
-            return False
-        for f in self.neighborhood(field):
-            if not self.fields[f].property('flagged') :
-                self.uncover(f)
-        return True
+        for f in self.fields_to_uncover(field):
+            self.uncover(f)
     
-    def mass_uncover_safe(self, field) -> bool:
+    def mass_uncover_safe(self, field) -> None:
         """Uncovers non-flagged adjacent fields when adjacent bombs are flagged"""
-        if not self.fields[field].isChecked() :
-            return False
+        self.uncover(field)
         counter = 0
-        safeNeighbors = []
         for f in self.neighborhood(field) :
             if self.fields[f].property('flagged') :
                 counter += 1
-            else :
-                safeNeighbors.append(f)
         if counter == self.fields[field].property('number') :
-            for f in safeNeighbors :
+            for f in self.fields_to_uncover(field) :
                 self.uncover(f)
-        return True
     
     def set_down(self, field) -> None:
-        if self.fields[field].isChecked():
-            for f in self.neighborhood(field):
-                if not self.fields[f].isChecked() and not self.fields[f].property('flagged') :
-                    self.fields[f].setDown(True)
-        else:
-            self.fields[field].setDown(True)
+        """Set buttons down"""
+        for f in self.fields_to_uncover(field):
+            self.fields[f].setDown(True)
     
     def set_up(self, field) -> None:
-        if self.fields[field].isChecked():
-            for f in self.neighborhood(field):
-                if not self.fields[f].isChecked() and not self.fields[f].property('flagged') :
-                    self.fields[f].setDown(False)
-        else:
-            self.fields[field].setDown(False)
+        """Set buttons up"""
+        for f in self.fields_to_uncover(field):
+            self.fields[f].setDown(False)
     
     def failure(self) -> None:
         """Show bombs, deactivate fields, and send lost signal"""
@@ -415,25 +411,26 @@ class MainWindow(QMainWindow):
             if ok : self.show_records()
     
     def handle_mouse_press(self, field) -> None:
-        """Change icon to wow"""
+        """Change icon to wow and press buttons"""
         self.new.setIcon(self.wow)
         self.playground.set_down(field)
     
     def handle_mouse_release(self, field) -> None:
-        """Change icon back to smiley"""
+        """Change icon back to smiley and un-press buttons"""
         self.new.setIcon(self.smiley)
         self.playground.set_up(field)
     
     def handle_mouse_click(self, field) -> None:
-        """Change icon to smiley, start timer on first move"""
+        """Start timer on first move and uncover fields"""
         if not self.timerID :
             self.timerID = self.startTimer(1000)
-        if self.playground.fields[field].isChecked() and self.property('massuncover') == 1 :
-            self.playground.mass_uncover(field)
-        elif self.playground.fields[field].isChecked() and self.property('massuncover') == 2 :
-            self.playground.mass_uncover_safe(field)
-        else :
-            self.playground.uncover(field)
+        match self.property('massuncover'):
+            case 0:
+                self.playground.uncover(field)
+            case 1:
+                self.playground.mass_uncover(field)
+            case 2:
+                self.playground.mass_uncover_safe(field)
     
     def message(self, field) -> None:
         """Changes icon and informs how many bombs are left"""
