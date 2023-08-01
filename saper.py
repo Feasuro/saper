@@ -210,16 +210,6 @@ class Board(QWidget):
             for f in self.fields_to_uncover(field) :
                 self.uncover(f)
     
-    def set_down(self, field) -> None:
-        """Set buttons down"""
-        for f in self.fields_to_uncover(field):
-            self.fields[f].setDown(True)
-    
-    def set_up(self, field) -> None:
-        """Set buttons up"""
-        for f in self.fields_to_uncover(field):
-            self.fields[f].setDown(False)
-    
     def failure(self) -> None:
         """Show bombs, deactivate fields, and send lost signal"""
         for field in self.bombs :
@@ -370,7 +360,7 @@ class MainWindow(QMainWindow):
             self.playground.fields[field].pressed.connect(self.handle_mouse_press)
             self.playground.fields[field].released.connect(self.handle_mouse_release)
             self.playground.fields[field].clicked.connect(self.handle_mouse_click)
-            self.playground.fields[field].right.connect(self.message)
+            self.playground.fields[field].right.connect(self.handle_right_click)
         self.setCentralWidget(self.playground)
     
     def handle_failure(self) -> None:
@@ -413,12 +403,14 @@ class MainWindow(QMainWindow):
     def handle_mouse_press(self, field) -> None:
         """Change icon to wow and press buttons"""
         self.new.setIcon(self.wow)
-        self.playground.set_down(field)
+        for f in self.playground.fields_to_uncover(field):
+            self.playground.fields[f].setDown(True)
     
     def handle_mouse_release(self, field) -> None:
         """Change icon back to smiley and un-press buttons"""
         self.new.setIcon(self.smiley)
-        self.playground.set_up(field)
+        for f in self.playground.fields_to_uncover(field):
+            self.playground.fields[f].setDown(False)
     
     def handle_mouse_click(self, field) -> None:
         """Start timer on first move and uncover fields"""
@@ -432,7 +424,7 @@ class MainWindow(QMainWindow):
             case 2:
                 self.playground.mass_uncover_safe(field)
     
-    def message(self, field) -> None:
+    def handle_right_click(self, field) -> None:
         """Changes icon and informs how many bombs are left"""
         self.playground.set_icon(field)
         flagged = self.playground.fields[field].property('flagged')
