@@ -1,8 +1,7 @@
 #!/usr/bin/env python
+"""Main window for the game"""
 
 import sys
-import records
-from game import *
 
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon, QAction, QIntValidator
@@ -10,12 +9,14 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QLabel,
                              QGridLayout, QToolBar, QSizePolicy, QDialog,
                              QMessageBox, QDialogButtonBox, QLineEdit)
 
+import records
+import game
+
 class MainWindow(QMainWindow):
     """Provides window interface for playing saper"""
-    
+
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        
         #title, icon, timer and defaults
         self.setWindowTitle('Saper')
         self.setWindowIcon(QIcon('./resources/mine.png'))
@@ -28,7 +29,7 @@ class MainWindow(QMainWindow):
         self.beginner_mode()
         self.beginner.setChecked(True)
         self.show()
-    
+
     def ui_setup(self) -> None:
         """Arranges all window elements."""
         #icons
@@ -118,7 +119,7 @@ class MainWindow(QMainWindow):
         options.addSeparator()
         options.addAction(self.massuncover)
         options.addAction(self.massuncoversafe)
-    
+
     def new_game(self) -> None:
         """Set up for a new game"""
         self.new.setIcon(self.smiley)
@@ -132,7 +133,7 @@ class MainWindow(QMainWindow):
         self.bombsleft = self.bombcount
         self.statusbar.showMessage(f'{self.bombsleft} bombs left')
         #game widget
-        self.playground = Board(self.rows, self.cols, self.bombcount, question=self.property('question'))
+        self.playground = game.Board(self.rows, self.cols, self.bombcount, question=self.property('question'))
         self.playground.lost.connect(self.handle_failure)
         self.playground.won.connect(self.handle_victory)
         for field in self.playground.fields :
@@ -141,7 +142,7 @@ class MainWindow(QMainWindow):
             self.playground.fields[field].clicked.connect(self.handle_mouse_click)
             self.playground.fields[field].right.connect(self.handle_right_click)
         self.setCentralWidget(self.playground)
-    
+
     def handle_failure(self) -> None:
         """Communicate failure to the player"""
         self.killTimer(self.timerID)
@@ -157,19 +158,19 @@ class MainWindow(QMainWindow):
         self.new.setIcon(self.glasses)
         #saving best time
         records.end_game(self)
-    
+
     def handle_mouse_press(self, field) -> None:
         """Change icon to wow and press buttons"""
         self.new.setIcon(self.wow)
         for f in self.playground.fields_to_uncover(field):
             self.playground.fields[f].setDown(True)
-    
+
     def handle_mouse_release(self, field) -> None:
         """Change icon back to smiley and un-press buttons"""
         self.new.setIcon(self.smiley)
         for f in self.playground.fields_to_uncover(field):
             self.playground.fields[f].setDown(False)
-    
+
     def handle_mouse_click(self, field) -> None:
         """Start timer on first move and uncover fields"""
         if not self.timerID :
@@ -181,7 +182,7 @@ class MainWindow(QMainWindow):
                 self.playground.mass_uncover(field)
             case 2:
                 self.playground.mass_uncover_safe(field)
-    
+
     def handle_right_click(self, field) -> None:
         """Changes icon and informs how many bombs are left"""
         self.playground.set_icon(field)
@@ -191,12 +192,12 @@ class MainWindow(QMainWindow):
         elif ( self.property('question') and flagged == 2 ) or ( not self.property('question') and flagged == 0 ):
             self.bombsleft += 1
         self.statusbar.showMessage(f'{self.bombsleft} bombs left')
-    
+
     def timerEvent(self, event) -> None:
         """Counts elapsed time of a game"""
         self.seconds += 1
         self.clock.setText('Time: ' + records.convert_seconds(self.seconds))
-    
+
     def beginner_mode(self) -> None:
         """Beginner game setup"""
         self.advanced.setChecked(False)
@@ -207,7 +208,7 @@ class MainWindow(QMainWindow):
         self.bombcount = 10
         self.setProperty('mode', 'b')
         self.new_game()
-    
+
     def advanced_mode(self) -> None:
         """Advanced game setup"""
         self.beginner.setChecked(False)
@@ -218,7 +219,7 @@ class MainWindow(QMainWindow):
         self.bombcount = 40
         self.setProperty('mode', 'a')
         self.new_game()
-    
+
     def expert_mode(self) -> None:
         """Expert game setup"""
         self.beginner.setChecked(False)
@@ -229,7 +230,7 @@ class MainWindow(QMainWindow):
         self.bombcount = 99
         self.setProperty('mode', 'e')
         self.new_game()
-    
+
     def custom_mode(self) -> None:
         """Custom game setup"""
         dialog = CustomSetupDialog(self)
@@ -241,33 +242,33 @@ class MainWindow(QMainWindow):
             self.new_game()
         else :
             self.custom.setChecked(False)
-    
+
     def enlarge(self) -> None:
         """Make fields bigger"""
         self.size += 2
         self.update()
-    
+
     def zoomout(self) -> None:
         """Make fields smaller"""
         self.size -= 2
         self.update()
-    
+
     def paintEvent(self, event) -> None:
         """Set fixed sizes of self, fields, fonts and icons"""
         font = self.playground.font()
         font.setPixelSize( int(self.size * 0.7) )
         for field in self.playground.fields:
             self.playground.fields[field].setFixedSize(QSize(self.size, self.size))
-            self.playground.fields[field].setIconSize(QSize( int(self.size * 0.8), int(self.size * 0.8) ))
+            self.playground.fields[field].setIconSize(QSize(int(self.size * 0.8), int(self.size * 0.8)))
             self.playground.fields[field].setFont(font)
         self.setFixedSize(self.size * self.cols + 18, self.size * self.rows + 106)
         super().paintEvent(event)
-    
+
     def question_marks(self) -> None:
         """Toggle marking fields with question mark"""
         self.setProperty('question', not self.property('question'))
         self.new_game()
-    
+
     def mass_uncover(self) -> None:
         """Toggle option for uncovering neighbors"""
         self.massuncoversafe.setChecked(False)
@@ -276,7 +277,7 @@ class MainWindow(QMainWindow):
         if not self.property('massuncover') :
             self.setProperty('massuncover', 1)
         self.new_game()
-    
+
     def mass_uncover_safe(self) -> None:
         """Toggle option for uncovering neighbors - safe version"""
         self.massuncover.setChecked(False)
@@ -289,9 +290,9 @@ class MainWindow(QMainWindow):
 
 class CustomSetupDialog(QDialog):
     """Dialog window to setup custom rows, columns and bombs count"""
-    
-    def __init__(self, parent=None, *args, **kwargs) -> None:
-        super().__init__(parent, *args, **kwargs)
+
+    def __init__(self, *args, parent=None, **kwargs) -> None:
+        super().__init__(*args, parent, **kwargs)
         self.parent = parent
         self.setWindowTitle('Setup custom mode')
         #standard ok/cancel buttons
@@ -326,7 +327,7 @@ class CustomSetupDialog(QDialog):
         layout.addWidget(self.bombcount, 2, 1)
         layout.addWidget(buttons, 3, 0, 1, 2, Qt.AlignmentFlag.AlignCenter)
         self.setLayout(layout)
-    
+
     def accept(self) -> None:
         """First check if there's no more bombs than fields, then apply"""
         if int(self.bombcount.text()) < int(self.rows.text()) * int(self.cols.text()):

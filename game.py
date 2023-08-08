@@ -1,3 +1,5 @@
+"""The game's logic implementation"""
+
 import random
 
 from PyQt6.QtCore import Qt
@@ -29,7 +31,7 @@ class CoverButton(QPushButton):
                            *[number="7"] { color: black; }
                            *[number="8"] { color: magenta; }                           
                            ''')
-    
+
     def mousePressEvent(self, event) -> None:
         """Change icon when right-click, send signal when left-click"""
         if event.button() == Qt.MouseButton.RightButton :
@@ -41,14 +43,14 @@ class CoverButton(QPushButton):
                 self.right.emit(self.property('field'))
         elif event.button() == Qt.MouseButton.LeftButton :
             self.pressed.emit(self.property('field'))
-    
+
     def mouseReleaseEvent(self, event) -> None:
         """Emit coordinates of clicked button"""
         if event.button() == Qt.MouseButton.LeftButton :
             self.released.emit(self.property('field'))
             if event.pos() in self.rect():
                 self.clicked.emit(self.property('field'))
-    
+
     def mouseMoveEvent(self, event) -> None:
         """Sets button up/down according to mouse position"""
         if Qt.MouseButton.LeftButton in event.buttons() :
@@ -79,8 +81,8 @@ class Board(QWidget):
     """Widget that represents the game board"""
     lost = Signal()
     won = Signal()
-    
-    def __init__(self, rows, cols, bombcount, question=False, *args, **kwargs) -> None:
+
+    def __init__(self, rows, cols, bombcount, *args, question=False, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         #icons
         self.noicon = QIcon()
@@ -88,8 +90,8 @@ class Board(QWidget):
         self.flag.addFile('./resources/flag.png', mode=QIcon.Mode.Disabled)
         self.mine = QIcon('./resources/mine.png')
         self.mine.addFile('./resources/mine.png', mode=QIcon.Mode.Disabled)
-        self.question = QIcon('./resources/question.png')
-        self.question.addFile('./resources/question.png', mode=QIcon.Mode.Disabled)
+        self.qmark = QIcon('./resources/question.png')
+        self.qmark.addFile('./resources/question.png', mode=QIcon.Mode.Disabled)
         #counters
         self.bombcount = bombcount
         self.wincounter = rows * cols
@@ -101,7 +103,7 @@ class Board(QWidget):
         for field in self.fields:
             layout.addWidget(self.fields[field], *field)
         self.setLayout(layout)
-    
+
     def populate(self) -> None:
         """Fills board with numbers (9 stands for mine)"""
         self.bombs = random.sample(sorted(self.fields), self.bombcount)
@@ -112,17 +114,16 @@ class Board(QWidget):
         for field in self.fields:
             if field in self.bombs:
                 continue
+            counter = 0
+            for f in self.neighborhood(field):
+                if f in self.bombs:
+                    counter += 1
+            if counter == 0:
+                self.empty.append(field)
             else:
-                counter = 0
-                for f in self.neighborhood(field):
-                    if f in self.bombs:
-                        counter += 1
-                if counter == 0:
-                    self.empty.append(field)
-                else:
-                    self.numbers.append(field)
-                self.fields[field].setProperty('number', counter)
-    
+                self.numbers.append(field)
+            self.fields[field].setProperty('number', counter)
+
     def neighborhood(self, field: tuple) -> list:
         """Returns neighbor fields to the given one"""
         neighbors = []
@@ -130,10 +131,10 @@ class Board(QWidget):
             for j in range(field[1]-1, field[1]+2):
                 if (i,j) == field:
                     continue
-                elif (i,j) in self.fields:
+                if (i,j) in self.fields:
                     neighbors.append((i,j))
         return neighbors
-    
+
     def fields_to_uncover(self, field: tuple) -> list:
         """Return list of un-checked and un-flagged fields"""
         result = []
@@ -144,7 +145,7 @@ class Board(QWidget):
         else:
             result.append(field)
         return result
-    
+
     def set_icon(self, field) -> None:
         """Set button's icon according to property"""
         match self.fields[field].property('flagged'):
@@ -153,8 +154,8 @@ class Board(QWidget):
             case 1:
                 self.fields[field].setIcon(self.flag)
             case 2:
-                self.fields[field].setIcon(self.question)
-    
+                self.fields[field].setIcon(self.qmark)
+
     def uncover(self, field) -> bool:
         """Method reveals content of the field(s)"""
         if self.fields[field].isChecked() :
@@ -176,12 +177,12 @@ class Board(QWidget):
         #check victory condition
         self.victory()
         return True
-    
+
     def mass_uncover(self, field) -> None:
         """Uncovers all non-flagged adjacent fields"""
         for f in self.fields_to_uncover(field):
             self.uncover(f)
-    
+
     def mass_uncover_safe(self, field) -> None:
         """Uncovers non-flagged adjacent fields when adjacent bombs are flagged"""
         self.uncover(field)
@@ -192,7 +193,7 @@ class Board(QWidget):
         if counter == self.fields[field].property('number') :
             for f in self.fields_to_uncover(field) :
                 self.uncover(f)
-    
+
     def failure(self) -> None:
         """Show bombs, deactivate fields, and send lost signal"""
         for field in self.bombs :
@@ -202,7 +203,7 @@ class Board(QWidget):
             if not self.fields[field].isChecked():
                 self.fields[field].setEnabled(False)
         self.lost.emit()
-    
+
     def victory(self) -> None:
         """Decrease counter, check condition, deactivate bomb-fields and send win signal"""
         self.wincounter -= 1

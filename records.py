@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+"""Module for handling records in csv database"""
 
 import csv
 import time
@@ -12,7 +13,7 @@ FIELDNAMES = ['mode', 'date', 'name', 'time']
 
 def convert_seconds(seconds: int | str) -> str:
     """Present seconds in human readable format"""
-    if type(seconds) == str :
+    if isinstance(seconds, str) :
         seconds = int(seconds)
     if seconds < 60 :
         return f'{seconds}s'
@@ -21,17 +22,17 @@ def convert_seconds(seconds: int | str) -> str:
     else :
         return f'{seconds // 3600}h{seconds // 60}m{seconds % 60}s'
 
-class Model(object):
+class Model():
     """Holds best times as sorted lists, synchronizes with csv file
     provides interface to view data in tabular form"""
-    
+
     def __new__(cls):
         """Creates a singleton object, if it is not created,
         or else returns the previous singleton object"""
         if not hasattr(cls, 'instance'):
             cls.instance = super(Model, cls).__new__(cls)
         return cls.instance
-        
+
     def __init__(self, path: str=RECORDS_PATH) -> None:
         """Initialize data and sort it"""
         self.path = path
@@ -44,7 +45,7 @@ class Model(object):
         else:
             self.no_file = False
         self.sort()
-    
+
     def load(self) -> None:
         """Reads records from file"""
         with open(self.path, 'r', newline='', encoding='utf-8') as records :
@@ -53,32 +54,33 @@ class Model(object):
             for row in reader:
                 row['time'] = int(row['time'])
                 self.data[row.pop('mode')].append(row)
-    
+
     def sort(self) -> None:
         """Sort data by best times"""
-        for key in self.data:
-            self.data[key].sort(key=lambda item: item['time'])
-    
+        for value in self.data.values():
+            value.sort(key=lambda item: item['time'])
+
     def check_record(self, mode: str, seconds: int) -> bool:
         """Check if given time is the best in given mode"""
         for item in self.data[mode]:
             if item['time'] < seconds:
                 return False
         return True
-    
+
     def add(self, mode: str, name: str, seconds: int) -> None:
         """Add record, sort and synchronize with file"""
         self.data[mode].append({'date': time.strftime('%x'), 'name': name, 'time': seconds})
         self.sort()
         with open(self.path, 'a', newline='', encoding='utf-8') as records :
             writer = csv.DictWriter(records, fieldnames=self.header, dialect='unix')
-            if self.no_file: writer.writeheader()
+            if self.no_file:
+                writer.writeheader()
             writer.writerow({'mode': mode, 'date': time.strftime('%x'), 'name': name, 'time': seconds})
-    
+
     def __len__(self) -> int:
         """Return how many rows are present"""
-        return max(len(self.data[key]) for key in self.data)
-    
+        return max(len(value) for value in self.data.values())
+
     def item(self, row: int, col: int) -> str:
         """Returns item at given index for presenting data in tabular form"""
         if col < 0: raise IndexError
@@ -100,7 +102,7 @@ class Model(object):
 
 class View(QDialog):
     """Dialog window that displays records"""
-    
+
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         #title and 'ok' button
@@ -141,6 +143,7 @@ def end_game(parent) -> None:
     model = Model()
     mode = parent.property('mode')
     seconds = parent.seconds
+    ok = False
     if model.check_record(mode, seconds):
         name, ok = QInputDialog.getText(parent, 'New record!', 'Your name:')
     if ok:
