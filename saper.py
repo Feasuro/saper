@@ -15,8 +15,8 @@ import game
 class MainWindow(QMainWindow):
     """Provides window interface for playing saper"""
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self) -> None:
+        super().__init__()
         #title, icon, timer and defaults
         self.setWindowTitle('Saper')
         self.setWindowIcon(QIcon('./resources/mine.png'))
@@ -291,8 +291,8 @@ class MainWindow(QMainWindow):
 class CustomSetupDialog(QDialog):
     """Dialog window to setup custom rows, columns and bombs count"""
 
-    def __init__(self, *args, parent=None, **kwargs) -> None:
-        super().__init__(*args, parent, **kwargs)
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
         self.parent = parent
         self.setWindowTitle('Setup custom mode')
         #standard ok/cancel buttons

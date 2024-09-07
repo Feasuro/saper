@@ -22,11 +22,11 @@ def convert_seconds(seconds: int | str) -> str:
     else :
         return f'{seconds // 3600}h{seconds // 60}m{seconds % 60}s'
 
-class Model():
+class Model:
     """Holds best times as sorted lists, synchronizes with csv file
     provides interface to view data in tabular form"""
 
-    def __new__(cls):
+    def __new__(cls, *args, **kwargs):
         """Creates a singleton object, if it is not created,
         or else returns the previous singleton object"""
         if not hasattr(cls, 'instance'):
@@ -44,7 +44,7 @@ class Model():
             self.header = FIELDNAMES
         else:
             self.no_file = False
-        self.sort()
+            self.sort()
 
     def load(self) -> None:
         """Reads records from file"""
@@ -103,13 +103,13 @@ class Model():
 class View(QDialog):
     """Dialog window that displays records"""
 
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
         #title and 'ok' button
         self.setWindowTitle('Best times')
         button = QDialogButtonBox( QDialogButtonBox.StandardButton.Ok )
         button.accepted.connect(self.close)
-        model = Model()
+        model = Model(RECORDS_PATH)
         #layout
         layout = QGridLayout()
         layout.setHorizontalSpacing(20)
@@ -129,18 +129,18 @@ def show(parent=None) -> None:
     Args:
         parent (MainWindow, optional): Defaults to None.
     """
-    model = Model()
+    model = Model(RECORDS_PATH)
     if model.no_file :
         QMessageBox.information(parent, 'Not found', 'No records have been saved yet.')
     else:
-        View(parent).exec()
+        View(parent).show()
 
 def end_game(parent) -> None:
     """Check if finished game's time should be recorded
     Args:
         parent (MainWindow):
     """
-    model = Model()
+    model = Model(RECORDS_PATH)
     mode = parent.property('mode')
     seconds = parent.seconds
     ok = False
@@ -148,7 +148,7 @@ def end_game(parent) -> None:
         name, ok = QInputDialog.getText(parent, 'New record!', 'Your name:')
     if ok:
         model.add(mode, name, seconds)
-        show()
+        show(parent)
 
 
 if __name__ == '__main__':

@@ -14,9 +14,9 @@ class CoverButton(QPushButton):
     released = Signal(tuple)
     right = Signal(tuple)
 
-    def __init__(self, field: tuple, *args, **kwargs) -> None:
+    def __init__(self, field: tuple) -> None:
         """Button is aware of it's position that is emitted when clicked"""
-        super().__init__(*args, **kwargs)
+        super().__init__()
         self.setCheckable(True)
         self.setProperty('field', field)
         self.setProperty('flagged', 0)
@@ -82,8 +82,8 @@ class Board(QWidget):
     lost = Signal()
     won = Signal()
 
-    def __init__(self, rows, cols, bombcount, *args, question=False, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self, rows, cols, bombcount, question=False) -> None:
+        super().__init__()
         #icons
         self.noicon = QIcon()
         self.flag = QIcon('./resources/flag.png')
