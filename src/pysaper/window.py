@@ -1,7 +1,4 @@
-#!/usr/bin/env python
 """Main window for the game"""
-
-import sys
 
 from PyQt6.QtCore import Qt, QSize
 from PyQt6.QtGui import QIcon, QAction, QIntValidator
@@ -60,7 +57,7 @@ class MainWindow(QMainWindow):
         self.custom.triggered.connect(self.custom_mode)
         close = QAction(self.close, '&Exit', self)
         close.setShortcut('Alt+F4')
-        close.triggered.connect(app.quit)
+        close.triggered.connect(QApplication.instance().quit)
         larger = QAction('&Larger', self)
         larger.setShortcut('Ctrl++')
         larger.triggered.connect(self.enlarge)
@@ -337,9 +334,3 @@ class CustomSetupDialog(QDialog):
             self.done(1)
         else :
             QMessageBox.critical(self, 'Invalid', "Too many bombs for given board dimensions")
-
-
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    sys.exit(app.exec())
